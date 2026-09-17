@@ -1,14 +1,109 @@
+```html
 <!doctype html>
 <html>
     <head>
+        <meta charset="utf-8">
+
+        <!-- A-Frame -->
         <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+
+        <!-- AR.js -->
         <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+        <!-- GLBモデル用 -->
         <script src="https://raw.githack.com/donmccurdy/aframe-extras/master/dist/aframe-extras.loaders.min.js"></script>
+
+        <!-- ジェスチャー操作用 -->
         <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-detector.js"></script>
         <script src="https://raw.githack.com/AR-js-org/studio-backend/master/src/modules/marker/tools/gesture-handler.js"></script>
+
+        <style>
+            /*
+             * AR画面上に表示する情報パネル
+             */
+            #ar-info {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+
+                z-index: 9999;
+
+                padding: 14px 18px;
+
+                background: rgba(0, 0, 0, 0.65);
+                color: white;
+
+                border: 1px solid rgba(255, 255, 255, 0.4);
+                border-radius: 12px;
+
+                font-family: sans-serif;
+                font-size: 16px;
+                line-height: 1.8;
+
+                min-width: 130px;
+
+                pointer-events: none;
+            }
+
+            /*
+             * 数値部分
+             */
+            #distance,
+            #match-rate {
+                font-size: 20px;
+                font-weight: bold;
+            }
+
+            /*
+             * 情報項目の間隔
+             */
+            .info-item {
+                margin-bottom: 4px;
+            }
+
+            .info-item:last-child {
+                margin-bottom: 0;
+            }
+
+            /*
+             * AR.jsのデバッグUIなどが
+             * 誤って前面に出ることを防ぐ
+             */
+            a-scene {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+            }
+        </style>
     </head>
 
     <body style="margin: 0; overflow: hidden;">
+
+        <!-- =========================================
+             AR画面上の情報表示
+             ========================================= -->
+        <div id="ar-info">
+
+            <div class="info-item">
+                距離：
+                <span id="distance">--</span>
+                cm
+            </div>
+
+            <div class="info-item">
+                一致率：
+                <span id="match-rate">--</span>
+                %
+            </div>
+
+        </div>
+
+
+        <!-- =========================================
+             ARシーン
+             ========================================= -->
         <a-scene
             vr-mode-ui="enabled: false;"
             loading-screen="enabled: false;"
@@ -18,13 +113,23 @@
             embedded
             gesture-detector
         >
+
+            <!-- =====================================
+                 3Dモデル
+                 ===================================== -->
             <a-assets>
+
                 <a-asset-item
                     id="animated-asset"
                     src="assets/asset.glb"
                 ></a-asset-item>
+
             </a-assets>
 
+
+            <!-- =====================================
+                 マーカー
+                 ===================================== -->
             <a-marker
                 id="animated-marker"
                 type="pattern"
@@ -33,8 +138,9 @@
                 raycaster="objects: .clickable"
                 emitevents="true"
                 cursor="fuse: false; rayOrigin: mouse;"
-                id="markerA"
             >
+
+                <!-- 3Dモデル -->
                 <a-entity
                     id="bowser-model"
                     scale="0.7314285714285714 0.7314285714285714 0.7314285714285714"
@@ -43,9 +149,155 @@
                     class="clickable"
                     gesture-handler
                 ></a-entity>
+
             </a-marker>
 
+
+            <!-- =====================================
+                 カメラ
+                 ===================================== -->
             <a-entity camera></a-entity>
+
         </a-scene>
+
+
+        <!-- =========================================
+             距離・一致率の計算
+             ========================================= -->
+        <script>
+
+            /*
+             * HTML要素を取得
+             */
+            const marker = document.getElementById("animated-marker");
+            const model = document.getElementById("bowser-model");
+
+            const distanceText =
+                document.getElementById("distance");
+
+            const matchRateText =
+                document.getElementById("match-rate");
+
+
+            /*
+             * マーカーを認識しているか
+             */
+            let markerDetected = false;
+
+
+            /*
+             * マーカーを発見したとき
+             */
+            marker.addEventListener("markerFound", function () {
+
+                markerDetected = true;
+
+                /*
+                 * 現在のAR.jsでは、
+                 * パターン画像との具体的な一致率を
+                 * 直接取得していないため、
+                 * 認識できている状態を100%として表示。
+                 */
+                matchRateText.textContent = "100";
+
+            });
+
+
+            /*
+             * マーカーを見失ったとき
+             */
+            marker.addEventListener("markerLost", function () {
+
+                markerDetected = false;
+
+                distanceText.textContent = "--";
+
+                matchRateText.textContent = "0";
+
+            });
+
+
+            /*
+             * 距離を更新
+             */
+            function updateDistance() {
+
+                /*
+                 * マーカーを認識していない場合
+                 */
+                if (!markerDetected) {
+
+                    distanceText.textContent = "--";
+
+                    return;
+                }
+
+
+                /*
+                 * Three.jsの座標系で
+                 * マーカーのワールド座標を取得
+                 */
+                const markerPosition =
+                    new THREE.Vector3();
+
+                marker.object3D.getWorldPosition(
+                    markerPosition
+                );
+
+
+                /*
+                 * カメラのワールド座標を取得
+                 */
+                const camera =
+                    document.querySelector("[camera]");
+
+                const cameraPosition =
+                    new THREE.Vector3();
+
+                camera.object3D.getWorldPosition(
+                    cameraPosition
+                );
+
+
+                /*
+                 * カメラからマーカーまでの距離
+                 */
+                const distance =
+                    cameraPosition.distanceTo(
+                        markerPosition
+                    );
+
+
+                /*
+                 * Three.js / AR.jsの距離単位を
+                 * cmとして表示
+                 *
+                 * ※実際の表示値を確認して、
+                 *   必要なら倍率を調整してください。
+                 */
+                const distanceCm =
+                    distance * 100;
+
+
+                /*
+                 * 小数第1位まで表示
+                 */
+                distanceText.textContent =
+                    distanceCm.toFixed(1);
+
+            }
+
+
+            /*
+             * 0.1秒ごとに距離を更新
+             */
+            setInterval(
+                updateDistance,
+                100
+            );
+
+        </script>
+
     </body>
 </html>
+```
